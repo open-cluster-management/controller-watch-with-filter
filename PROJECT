@@ -1,0 +1,16 @@
+domain: t.io
+layout:
+- go.kubebuilder.io/v3
+projectName: poc-secret
+repo: t.io/cached-secret
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: t.io
+  group: webapp
+  kind: Guestbook
+  path: t.io/cached-secret/api/v1
+  version: v1
+version: "3"
