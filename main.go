@@ -24,7 +24,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"k8s.io/apimachinery/pkg/labels"
+	webappv1 "github.com/open-cluster-management/controller-watch-with-filter/api/v1"
+	"github.com/open-cluster-management/controller-watch-with-filter/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,8 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	webappv1 "t.io/cached-secret/api/v1"
-	"t.io/cached-secret/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -66,26 +65,14 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	//	filteredCache, err := cache.New(mgr.GetConfig(), fopt)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to set up filtered cache %w", err)
-	//	}
-	//
-	//	ifm, err := filteredCache.GetInformer(context.TODO(), &webappv1.Guestbook{})
-	//	if err != nil {
-	//		return fmt.Errorf("failed to set up informer %w", err)
-	//	}
-	//	fopt := cache.Options{
-	//		Scheme: scheme,
-	//	}
-
 	filteredOpt := cache.Options{
 		Scheme: scheme,
-		SelectorsByObject: cache.SelectorsByObject{
-			&webappv1.Guestbook{}: {
-				Label: labels.SelectorFromSet(labels.Set{"app": "kubernetes-nmstate"}),
-			},
-		},
+		//		SelectorsByObject: cache.SelectorsByObject{
+		//			&webappv1.Guestbook{}: {
+		//				Label: labels.SelectorFromSet(labels.Set{"app": "kubernetes-nmstate"}),
+		//			},
+		//		},
+
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -97,11 +84,8 @@ func main() {
 		LeaderElectionID:       "8a9de901.t.io",
 		NewCache:               cache.BuilderWithOptions(filteredOpt),
 	})
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
 
+	// start controller watch configmap along wiht Guestbook
 	if err = (&controllers.GuestbookReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Guestbook"),
@@ -110,6 +94,17 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Guestbook")
 		os.Exit(1)
 	}
+
+	//	// start controller watch configmap, which has labels "app": "webapp", along wiht Guestbook
+	//	if err = (&controllers.GuestbookReconciler{
+	//		Client: mgr.GetClient(),
+	//		Log:    ctrl.Log.WithName("controllers").WithName("Guestbook"),
+	//		Scheme: mgr.GetScheme(),
+	//	}).SetupWithManagerInjectCache(mgr); err != nil {
+	//		setupLog.Error(err, "unable to create controller", "controller", "Guestbook")
+	//		os.Exit(1)
+	//	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

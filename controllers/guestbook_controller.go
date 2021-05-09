@@ -21,10 +21,15 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	webappv1 "t.io/cached-secret/api/v1"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+	webappv1 "github.com/open-cluster-management/controller-watch-with-filter/api/v1"
 )
 
 // GuestbookReconciler reconciles a Guestbook object
@@ -57,64 +62,46 @@ func (r *GuestbookReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	r.Log.Info(fmt.Sprintf("incoming instance is: %v", ins))
 
-	insList :=  &webappv1.GuestbookList{}
-		_ = r.List(context.TODO(),  insList)
-		r.Log.Info(fmt.Sprintf("incoming instance counts: %v", len(insList.Items)))
-
-
+	insList := &webappv1.GuestbookList{}
+	_ = r.List(context.TODO(), insList)
+	r.Log.Info(fmt.Sprintf("incoming instance counts: %v", len(insList.Items)))
 
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GuestbookReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	//	c, err := controller.NewUnmanaged("t.webapp", mgr, controller.Options{Reconciler: r})
-	//	if err != nil {
-	//		return fmt.Errorf("failed to create new controller %w", err)
-	//	}
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&webappv1.Guestbook{}).
+		Watches(&source.Kind{Type: &corev1.Secret{}},
+			&handler.EnqueueRequestForObject{}).
+		Complete(r)
+}
 
-	//	opt := cache.Options{
-	//		Scheme: mgr.GetScheme(),
-	//		SelectorsByObject: cache.SelectorsByObject{
-	//			&webappv1.Guestbook{}: {
-	//				Label: labels.SelectorFromSet(labels.Set{"app": "kubernetes-nmstate"}),
-	//			},
-	//		},
-	//	}
+// Watch Kind with Inject cache
+func (r *GuestbookReconciler) SetupWithManagerInjectCache(mgr ctrl.Manager) error {
+	opt := cache.Options{
+		Scheme: mgr.GetScheme(),
+		SelectorsByObject: cache.SelectorsByObject{
+			&corev1.Secret{}: {
+				Label: labels.SelectorFromSet(labels.Set{"app": "webapp"}),
+			},
+		},
+	}
 
-	//	fopt := cache.Options{
-	//		Scheme: mgr.GetScheme(),
-	//	}
-	//
-	//
-	//	c.Watch(
-	//		&source.Informer{Informer: ifm},
-	//		&handler.EnqueueRequestForObject{})
+	filterCache, err := cache.New(mgr.GetConfig(), opt)
+	if err != nil {
+		return err
+	}
 
-	//	// working version
-	//	c.Watch(
-	//		&source.Kind{Type: &webappv1.Guestbook{}},
-	//		&handler.EnqueueRequestForObject{})
+	if err := mgr.Add(filterCache); err != nil {
+		return err
+	}
 
-	//	ctx, cFunc := context.WithCancel(context.TODO())
-	//
-	//	defer cFunc()
-	//
-	//	defer r.Log.Info("stopped unmanaged controller")
-	//
-	//	if err := c.Start(ctx); err != nil {
-	//		r.Log.Error(err, "failed to start unmanaged controller")
-	//	}
-	//	r.Log.Info("started unmanaged controller")
-	//
-	//	if err := filteredCache.Start(ctx); err != nil {
-	//		r.Log.Error(err, "failed to start unmanaged cache")
-	//	}
-	//	r.Log.Info("started unmanaged filteredCache")
-	//
-	//	filteredCache
+	filteredSrc := source.NewKindWithCache(&corev1.Secret{}, filterCache)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webappv1.Guestbook{}).
+		Watches(filteredSrc, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
